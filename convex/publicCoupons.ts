@@ -188,11 +188,20 @@ export const deactivatePlaceholderCoupons = mutation({
     const all = await ctx.db.query("publicCoupons").collect();
     const placeholders = all.filter((c) => c.barcode === PLACEHOLDER_BARCODE);
     let deleted = 0;
+    let clipsRemoved = 0;
     for (const c of placeholders) {
+      const clips = await ctx.db
+        .query("clippedCoupons")
+        .withIndex("by_coupon", (q) => q.eq("publicCouponId", c._id))
+        .collect();
+      for (const clip of clips) {
+        await ctx.db.delete(clip._id);
+        clipsRemoved++;
+      }
       await ctx.db.delete(c._id);
       deleted++;
     }
-    return { deleted };
+    return { deleted, clipsRemoved };
   },
 });
 
@@ -201,6 +210,11 @@ export const clipCoupon = mutation({
   handler: async (ctx, args) => {
     const userId = await auth.getUserId(ctx);
     if (!userId) throw new Error("Not authenticated");
+    const coupon = await ctx.db.get(args.couponId);
+    if (!coupon) throw new Error("Coupon not found");
+    if (coupon.barcode === PLACEHOLDER_BARCODE) {
+      throw new Error("This coupon cannot be clipped");
+    }
     const existing = await ctx.db
       .query("clippedCoupons")
       .withIndex("by_user_and_coupon", (q) =>
