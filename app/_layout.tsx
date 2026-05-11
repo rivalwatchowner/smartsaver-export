@@ -105,6 +105,7 @@ function RootLayoutInner() {
               <Stack.Screen name="notifications" />
               <Stack.Screen name="privacy-security" />
               <Stack.Screen name="donate" />
+              <Stack.Screen name="gas-savings" />
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="+not-found" options={{ headerShown: true }} />
             </Stack>

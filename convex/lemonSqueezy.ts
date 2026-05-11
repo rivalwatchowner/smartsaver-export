@@ -12,6 +12,8 @@ export const createCheckout = action({
   args: {
     variantId: v.string(),
     planId: v.string(),
+    // FIX #2: Optional custom amount in cents (e.g. 750 = $7.50)
+    customAmountCents: v.optional(v.number()),
   },
   returns: v.string(),
   handler: async (ctx, args): Promise<string> => {
@@ -63,7 +65,15 @@ export const createCheckout = action({
       throw new Error(json.errors?.[0]?.detail || "Failed to create checkout");
     }
 
-    return json.data.attributes.url as string;
+    let checkoutUrl: string = json.data.attributes.url;
+
+    // FIX #2: Append custom price if provided
+    if (args.customAmountCents && args.customAmountCents > 0) {
+      const separator = checkoutUrl.includes("?") ? "&" : "?";
+      checkoutUrl = `${checkoutUrl}${separator}checkout[custom_price]=${args.customAmountCents}`;
+    }
+
+    return checkoutUrl;
   },
 });
 
@@ -95,9 +105,15 @@ export const handleWebhook = internalAction({
           planId,
           lemonSqueezyId: payload.data.id,
           status: attributes.status,
-          renewsAt: attributes.renews_at ? new Date(attributes.renews_at).getTime() : undefined,
-          endsAt: attributes.ends_at ? new Date(attributes.ends_at).getTime() : undefined,
-          trialEndsAt: attributes.trial_ends_at ? new Date(attributes.trial_ends_at).getTime() : undefined,
+          renewsAt: attributes.renews_at
+            ? new Date(attributes.renews_at).getTime()
+            : undefined,
+          endsAt: attributes.ends_at
+            ? new Date(attributes.ends_at).getTime()
+            : undefined,
+          trialEndsAt: attributes.trial_ends_at
+            ? new Date(attributes.trial_ends_at).getTime()
+            : undefined,
         });
         break;
       }
@@ -109,7 +125,9 @@ export const handleWebhook = internalAction({
           lemonSqueezyId: payload.data.id,
           status: attributes.status,
           renewsAt: undefined,
-          endsAt: attributes.ends_at ? new Date(attributes.ends_at).getTime() : undefined,
+          endsAt: attributes.ends_at
+            ? new Date(attributes.ends_at).getTime()
+            : undefined,
         });
         break;
       }
@@ -125,7 +143,6 @@ export const handleWebhook = internalAction({
         break;
       }
       case "subscription_payment_failed": {
-        // Logic for failed payment alerts could go here
         console.warn(`Payment failed for user ${userId}`);
         break;
       }

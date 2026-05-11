@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { SafeAreaView, ScrollView, View, Text, Input, Card, CardContent, CardHeader, CardTitle, Badge, Pressable, Spinner, Button } from "@/components/ui";
-import { Search, MapPin, Tag, Clock, ChevronRight, Sparkles, Folder, FolderOpen, ChevronDown, ChevronUp, Barcode, Heart, LogOut, ShoppingBag, Settings } from "lucide-react-native";
+import { Search, MapPin, Tag, Sparkles, ChevronDown, ChevronUp, Barcode, Heart, ShoppingBag, Settings, Fuel } from "lucide-react-native";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useRouter } from "expo-router";
@@ -15,7 +15,7 @@ export default function HomeScreen() {
   const [activeTab, setActiveTab] = useState<"all" | "clipped">("all");
   const groupedCoupons = useQuery(api.publicCoupons.listGroupedByStore, {});
   const groupedClipped = useQuery(api.publicCoupons.listClippedGroupedByStore, {});
-  const myClipped = useQuery(api.publicCoupons.listClippedGroupedByStore, {}); // Keeping for the count badge
+  const gasSavingsStations = useQuery(api.publicCoupons.listGasSavingsStations, {});
   const clipMutation = useMutation(api.publicCoupons.clipCoupon);
   const unclipMutation = useMutation(api.publicCoupons.unclipCoupon);
   const isAdmin = useQuery(api.admin.isAdmin, {});
@@ -63,7 +63,7 @@ export default function HomeScreen() {
   const rawData = activeTab === "all" ? groupedCoupons : groupedClipped;
   const totalClippedCount = groupedClipped?.reduce((sum, g) => sum + g.coupons.length, 0) || 0;
 
-  const filteredData = rawData?.filter(g => 
+  const filteredData = rawData?.filter(g =>
     (g.storeName?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
     g.coupons.some((c: any) => (c.title?.toLowerCase() || "").includes(searchQuery.toLowerCase()))
   ).sort((a: any, b: any) => {
@@ -76,6 +76,12 @@ export default function HomeScreen() {
     }
     return 0;
   });
+
+  const hasGasFuelDeals = (gasSavingsStations?.length ?? 0) > 0;
+  const filteredOutBySearch =
+    rawData !== undefined &&
+    rawData.length > 0 &&
+    (filteredData?.length ?? 0) === 0;
 
   return (
     <SafeAreaView edges={["top"]} className="flex-1 bg-background">
@@ -189,32 +195,75 @@ export default function HomeScreen() {
           <View className="items-center py-20">
             <Spinner size="large" />
           </View>
-        ) : filteredData?.length === 0 ? (
-          <View className="items-center py-20 bg-muted/20 rounded-3xl border border-dashed border-border">
-             {activeTab === "clipped" ? (
-                <>
-                   <Tag size={48} className="text-muted-foreground mb-4 opacity-20" />
-                   <Text className="font-bold text-lg text-muted-foreground">No clipped coupons</Text>
-                   <Text variant="muted" className="text-center px-10">Clip coupons to save them here for quick access at checkout!</Text>
-                   <Button 
-                    variant="outline" 
-                    className="mt-4 border-primary" 
-                    onPress={() => setActiveTab("all")}
-                   >
-                      <Text className="text-primary font-bold">Browse All Coupons</Text>
-                   </Button>
-                </>
-             ) : (
-                <>
-                   <ShoppingBag size={48} className="text-muted-foreground mb-4 opacity-20" />
-                   <Text className="font-bold text-lg text-muted-foreground">No coupons found</Text>
-                   <Text variant="muted">Try searching for another store</Text>
-                </>
-             )}
-          </View>
         ) : (
           <View className="gap-3">
-            {filteredData?.map((group: any) => {
+            {hasGasFuelDeals && (
+              <Pressable
+                onPress={() => router.push("/gas-savings")}
+                className="rounded-2xl border border-[#4F46E5]/25 bg-[#4F46E5]/8 p-4 flex-row items-center gap-4 active:opacity-90"
+              >
+                <View className="bg-[#4F46E5] p-2.5 rounded-xl">
+                  <Fuel size={22} className="text-white" />
+                </View>
+                <View className="flex-1">
+                  <Text className="font-bold text-base text-foreground">
+                    Gas Savings
+                  </Text>
+                  <Text variant="muted" className="text-xs">
+                    {gasSavingsStations!.length} station
+                    {gasSavingsStations!.length === 1 ? "" : "s"} with fuel deals — tap to compare prices
+                  </Text>
+                </View>
+                <Sparkles size={18} className="text-[#4F46E5]" />
+              </Pressable>
+            )}
+
+            {filteredData?.length === 0 ? (
+              <View className="items-center py-20 bg-muted/20 rounded-3xl border border-dashed border-border">
+                {activeTab === "clipped" ? (
+                  <>
+                    <Tag size={48} className="text-muted-foreground mb-4 opacity-20" />
+                    <Text className="font-bold text-lg text-muted-foreground">
+                      No clipped coupons
+                    </Text>
+                    <Text variant="muted" className="text-center px-10">
+                      Clip coupons to save them here for quick access at checkout!
+                    </Text>
+                    <Button
+                      variant="outline"
+                      className="mt-4 border-[#4F46E5]"
+                      onPress={() => setActiveTab("all")}
+                    >
+                      <Text className="text-[#4F46E5] font-bold">Browse All Coupons</Text>
+                    </Button>
+                  </>
+                ) : filteredOutBySearch ? (
+                  <>
+                    <Search size={48} className="text-muted-foreground mb-4 opacity-20" />
+                    <Text className="font-bold text-lg text-muted-foreground">
+                      No matching coupons
+                    </Text>
+                    <Text variant="muted" className="text-center px-8">
+                      Try a different search term or clear the search box.
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={48} className="text-[#4F46E5] mb-4 opacity-90" />
+                    <Text className="font-bold text-lg text-[#4F46E5]">
+                      AI is discovering deals…
+                    </Text>
+                    <Text variant="muted" className="text-center px-10">
+                      SmartSaver is scanning verified sources for new coupons. Pull
+                      to refresh or check back soon.
+                    </Text>
+                  </>
+                )}
+              </View>
+            ) : null}
+
+            {(filteredData?.length ?? 0) > 0
+              ? filteredData?.map((group: any) => {
               const storeId = group.storeId;
               const isExpanded = expandedStores[storeId];
               const storeName = group.storeName;
@@ -288,7 +337,7 @@ export default function HomeScreen() {
                                   className="h-8 rounded-lg flex-row gap-1.5 px-3"
                                   onPress={() => setSelectedBarcode({
                                     title: coupon.title,
-                                    value: coupon.barcode || "1234567890",
+                                    value: coupon.barcode || coupon.code || "",
                                     format: "CODE128"
                                   })}
                                 >
@@ -304,7 +353,8 @@ export default function HomeScreen() {
                   )}
                 </View>
               );
-            })}
+            })
+              : null}
           </View>
         )}
       </ScrollView>

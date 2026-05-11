@@ -65,7 +65,7 @@ export default defineSchema({
     category: v.optional(v.string()),
     memberPerks: v.optional(v.string()),
   }).index("by_name", ["name"]).index("by_category", ["category"]).searchIndex("search_name", { searchField: "name" }),
-  
+
   coupons: defineTable({
     storeId: v.id("stores"),
     title: v.string(),
@@ -124,10 +124,20 @@ export default defineSchema({
     terms: v.optional(v.string()),
     category: v.string(),
     sourceUrl: v.optional(v.string()),
-    states: v.optional(v.array(v.string())), // Optional state filtering
+    states: v.optional(v.array(v.string())),
     discoveredAt: v.number(),
     isActive: v.boolean(),
     verifiedCount: v.number(),
+    // FIX #3: Gas station fuel tracking fields
+    fuelPrice: v.optional(v.number()),
+    fuelType: v.optional(v.union(
+      v.literal("Regular"),
+      v.literal("Midgrade"),
+      v.literal("Premium"),
+      v.literal("Diesel"),
+    )),
+    fuelDiscountCents: v.optional(v.number()),
+    loyaltyProgram: v.optional(v.string()),
   }).index("by_store", ["storeId"]).index("by_active", ["isActive", "expiresAt"]),
 
   clippedCoupons: defineTable({
@@ -143,7 +153,7 @@ export default defineSchema({
     storeId: v.id("stores"),
     storeName: v.string(),
     loyaltyProgramName: v.string(),
-    accountIdentifier: v.string(), // Encrypted or sensitive
+    accountIdentifier: v.string(),
     pointsBalance: v.number(),
     cashbackBalance: v.number(),
     tier: v.optional(v.string()),
