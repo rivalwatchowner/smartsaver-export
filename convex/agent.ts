@@ -1,7 +1,7 @@
 "use node";
  
 import { Agent, createTool } from "@convex-dev/agent";
-import { components, api } from "./_generated/api";
+import { components, api, internal } from "./_generated/api";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
  
@@ -197,12 +197,10 @@ START SAVING NOW. Do not ask for clarification. Do not explain what you will do.
 
         let storeId;
         if (!args.isManufacturer) {
-          const store = await ctx.db
-            .query("stores")
-            .withSearchIndex("search_name", (q: any) =>
-              q.search("name", args.storeName)
-            )
-            .first();
+          const matches = await ctx.runQuery(api.stores.list, {
+            search: args.storeName,
+          });
+          const store = matches[0];
 
           if (!store) {
             console.warn("[couponAgent.savePublicCoupon] store not found", {
@@ -238,7 +236,13 @@ START SAVING NOW. Do not ask for clarification. Do not explain what you will do.
         };
 
         try {
-          await ctx.db.insert("publicCoupons", row);
+          const insertedId = await ctx.runMutation(
+            internal.publicCoupons.savePublicCouponMutation,
+            row
+          );
+          if (insertedId === null) {
+            return `Skipped: expired coupon: ${args.title}`;
+          }
           console.log("[couponAgent.savePublicCoupon] insert succeeded", {
             storeName: args.storeName,
             title: args.title?.slice?.(0, 60),

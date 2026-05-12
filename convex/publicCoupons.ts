@@ -1,11 +1,110 @@
 import { v } from "convex/values";
 import { mutation, action, query, internalAction, internalMutation } from "./_generated/server";
 import { api, internal } from "./_generated/api";
-import { couponAgent } from "./agent";
 import { auth } from "./auth";
 import type { Doc } from "./_generated/dataModel";
 
 const PLACEHOLDER_BARCODE = "123456789012";
+
+/** Used by the coupon agent tool (runs in actions — no ctx.db). Inserts one public coupon row. */
+export const savePublicCouponMutation = internalMutation({
+  args: {
+    storeId: v.optional(v.id("stores")),
+    storeName: v.string(),
+    brandName: v.optional(v.string()),
+    isManufacturer: v.optional(v.boolean()),
+    title: v.string(),
+    description: v.string(),
+    code: v.string(),
+    discount: v.string(),
+    discountAmount: v.optional(v.number()),
+    barcode: v.optional(v.string()),
+    expiresAt: v.string(),
+    terms: v.optional(v.string()),
+    category: v.string(),
+    sourceUrl: v.optional(v.string()),
+    discoveredAt: v.number(),
+    isActive: v.boolean(),
+    verifiedCount: v.number(),
+    fuelPrice: v.optional(v.number()),
+    fuelType: v.optional(
+      v.union(
+        v.literal("Regular"),
+        v.literal("Midgrade"),
+        v.literal("Premium"),
+        v.literal("Diesel")
+      )
+    ),
+    fuelDiscountCents: v.optional(v.number()),
+    loyaltyProgram: v.optional(v.string()),
+  },
+  returns: v.union(v.null(), v.id("publicCoupons")),
+  handler: async (ctx, args) => {
+    // Require a real source URL
+    if (!args.sourceUrl || typeof args.sourceUrl !== "string" || args.sourceUrl.trim() === "") {
+      console.log("Skipping coupon without sourceUrl:", args.title);
+      return null;
+    }
+
+    // Validate expiresAt
+    const expires = new Date(args.expiresAt);
+    if (isNaN(expires.getTime())) {
+      console.log("Skipping coupon with invalid expiresAt:", args.title, args.expiresAt);
+      return null;
+    }
+
+    // Freshness guard: discoveredAt must be recent (e.g., within 30 days)
+    const discoveredAt = args.discoveredAt ?? 0;
+    const discoveredAgeDays = (Date.now() - discoveredAt) / (1000 * 60 * 60 * 24);
+    if (!discoveredAt || discoveredAgeDays > 30) {
+      console.log("Skipping stale coupon (discovered too long ago):", args.title, args.discoveredAt);
+      return null;
+    }
+
+    // Skip already-expired coupons
+    if (expires < new Date()) {
+      console.log("Skipping expired coupon:", args.title, args.expiresAt);
+      return null;
+    }
+
+    // Skip placeholder barcode rows
+    if (args.barcode === PLACEHOLDER_BARCODE) {
+      console.log("Skipping placeholder barcode coupon:", args.title);
+      return null;
+    }
+
+    // Deduplicate by code if present
+    if (args.code && args.code.trim() !== "") {
+      const existingByCode = await ctx.db
+        .query("publicCoupons")
+        .filter((q) => q.eq(q.field("code"), args.code))
+        .first();
+      if (existingByCode) {
+        console.log("Skipping duplicate coupon by code:", args.title, args.code);
+        return null;
+      }
+    } else if (args.storeId) {
+      // If no code, dedupe by storeId + title
+      const existingByTitle = await ctx.db
+        .query("publicCoupons")
+        .filter((q) => q.eq(q.field("storeId"), args.storeId))
+        .filter((q) => q.eq(q.field("title"), args.title))
+        .first();
+      if (existingByTitle) {
+        console.log("Skipping duplicate coupon by store+title:", args.title);
+        return null;
+      }
+    }
+
+    // All checks passed — insert
+    try {
+      return await ctx.db.insert("publicCoupons", args);
+    } catch (err) {
+      console.log("Failed to insert coupon:", args.title, err);
+      return null;
+    }
+  },
+});
 
 // Helper function to group coupons by store
 function groupCouponsByStore(coupons: any[], stores: any[]) {
@@ -249,6 +348,24 @@ export const unclipCoupon = mutation({
   },
 });
 
+export const deleteExpiredCoupons = mutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const now = new Date();
+    const coupons = await ctx.db.query("publicCoupons").collect();
+    let count = 0;
+    for (const c of coupons) {
+      if (c.expiresAt && new Date(c.expiresAt) < now) {
+        await ctx.db.delete(c._id);
+        count++;
+      }
+    }
+    console.log(`Deleted ${count} expired coupons`);
+    return count;
+  },
+});
+
 export const discoverAllStoreCoupons = internalAction({
   args: { tier: v.number() },
   returns: v.null(),
@@ -292,15 +409,18 @@ export const discoverForStoreAction = internalAction({
   args: { storeId: v.id("stores"), storeName: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const { couponAgent } = await import("./agent");
     const { threadId } = await couponAgent.createThread(ctx, {});
     await couponAgent.saveMessage(ctx, {
       threadId,
-      prompt: `Search ACTIVE coupons at ${args.storeName}. Call savePublicCoupon tool for 3-5 high-quality active deals. You MUST provide a real sourceUrl for every coupon — never invent example coupons.`,
+      prompt: `Search ACTIVE coupons at ${args.storeName}. Call savePublicCoupon tool for 3-5 high-quality active deals. You MUST provide a real sourceUrl for every coupon — never invent example coupons.
+
+ONLY save coupons that are currently valid. Ignore any deal with an expiration date in the past. If the expiration date is earlier than today, DO NOT save it. If no expiration date is listed, skip it.`,
       skipEmbeddings: true,
     });
     const result = await couponAgent.streamText(
       ctx,
-      { threadId, maxSteps: 24 },
+      { threadId },
       {}
     );
     await result.consumeStream();
@@ -351,18 +471,21 @@ export const discoverGasForStoreAction = internalAction({
   args: { storeId: v.id("stores"), storeName: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const { couponAgent } = await import("./agent");
     const { threadId } = await couponAgent.createThread(ctx, {});
     await couponAgent.saveMessage(ctx, {
       threadId,
       prompt: `Find current fuel prices and discounts at ${args.storeName}.
 Look for: per-gallon price (Regular, Midgrade, Premium, Diesel), fuel discount programs (cents off per gallon), and loyalty fuel rewards.
 Call savePublicCoupon with the fuelPrice, fuelType, fuelDiscountCents, and loyaltyProgram fields filled in where applicable.
-NEVER invent fuel prices. You MUST provide a real sourceUrl. Only save deals you can verify.`,
+NEVER invent fuel prices. You MUST provide a real sourceUrl. Only save deals you can verify.
+
+ONLY save coupons that are currently valid. Ignore any deal with an expiration date in the past. If the expiration date is earlier than today, DO NOT save it. If no expiration date is listed, skip it.`,
       skipEmbeddings: true,
     });
     const result = await couponAgent.streamText(
       ctx,
-      { threadId, maxSteps: 24 },
+      { threadId },
       {}
     );
     await result.consumeStream();
@@ -625,5 +748,24 @@ export const seedPublicCoupons = mutation({
         }
       }
     }
+  },
+});
+
+// --- Cleanup orphan clippedCoupons mutation ---
+export const cleanupOrphanClippedCoupons = mutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const clipped = await ctx.db.query("clippedCoupons").collect();
+    let removed = 0;
+    for (const clip of clipped) {
+      const exists = await ctx.db.get(clip.publicCouponId);
+      if (!exists) {
+        await ctx.db.delete(clip._id);
+        removed++;
+      }
+    }
+    console.log(`Removed ${removed} orphan clippedCoupons`);
+    return removed;
   },
 });
