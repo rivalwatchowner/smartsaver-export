@@ -1,5 +1,5 @@
 import { cronJobs } from "convex/server";
-import { internal } from "./_generated/api";
+import { internal, api } from "./_generated/api";
 
 const crons = cronJobs();
 
@@ -17,6 +17,15 @@ crons.interval(
   { hours: 12 },
   internal.publicCoupons.discoverAllStoreCoupons,
   { tier: 2 }
+);
+
+// FIX #3: Gas station fuel deal discovery every 6 hours
+// Calls the internal wrapper that fans out to all gas stations
+crons.interval(
+  "discover-gas-station-deals",
+  { hours: 6 },
+  internal.publicCoupons.discoverGasStationDealsInternal,
+  {}
 );
 
 export default crons;

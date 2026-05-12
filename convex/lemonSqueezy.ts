@@ -8,10 +8,64 @@ import crypto from "crypto";
 
 const LEMON_SQUEEZY_ENDPOINT = "https://api.lemonsqueezy.com/v1";
 
+/** Donation preset → Convex env key (numeric Lemon Squeezy variant id). */
+const donationVariantEnvKey = (preset: "5" | "10" | "15" | "25") =>
+  `LEMON_SQUEEZY_VARIANT_DONATION_${preset}` as const;
+
+function resolveDonationVariantId(args: {
+  planId: string;
+  donationPreset?: "5" | "10" | "15" | "25";
+  customAmountCents?: number;
+  variantId?: string;
+}): string {
+  if (args.planId !== "donation") {
+    if (!args.variantId) throw new Error("variantId is required for this checkout");
+    return args.variantId;
+  }
+
+  if (args.donationPreset) {
+    const key = donationVariantEnvKey(args.donationPreset);
+    const id = process.env[key];
+    if (!id || !id.trim()) {
+      throw new Error(
+        `Missing Convex environment variable ${key}. Set it to the Lemon Squeezy variant id for the $${args.donationPreset} donation (Products → variant id in dashboard or API).`
+      );
+    }
+    return id.trim();
+  }
+
+  if (args.customAmountCents != null && args.customAmountCents > 0) {
+    const id = process.env.LEMON_SQUEEZY_VARIANT_DONATION_CUSTOM;
+    if (!id || !id.trim()) {
+      throw new Error(
+        "Missing Convex environment variable LEMON_SQUEEZY_VARIANT_DONATION_CUSTOM. Set it to the Lemon Squeezy variant id used for pay-what-you-want / custom donation amounts."
+      );
+    }
+    return id.trim();
+  }
+
+  if (args.variantId) return args.variantId;
+
+  throw new Error(
+    "Donation checkout requires donationPreset (5|10|15|25) or customAmountCents with LEMON_SQUEEZY_VARIANT_DONATION_CUSTOM set in Convex."
+  );
+}
+
 export const createCheckout = action({
   args: {
-    variantId: v.string(),
     planId: v.string(),
+    /** Legacy subscription checkouts; donations should use donationPreset instead. */
+    variantId: v.optional(v.string()),
+    donationPreset: v.optional(
+      v.union(
+        v.literal("5"),
+        v.literal("10"),
+        v.literal("15"),
+        v.literal("25")
+      )
+    ),
+    /** PWYW / custom price in cents (e.g. 750 = $7.50). Appends checkout[custom_price] to checkout URL. */
+    customAmountCents: v.optional(v.number()),
   },
   returns: v.string(),
   handler: async (ctx, args): Promise<string> => {
@@ -20,6 +74,20 @@ export const createCheckout = action({
 
     const user = await ctx.runQuery(api.users.getMe);
     if (!user) throw new Error("User not found");
+
+    const variantId = resolveDonationVariantId({
+      planId: args.planId,
+      donationPreset: args.donationPreset,
+      customAmountCents: args.customAmountCents,
+      variantId: args.variantId,
+    });
+
+    console.log("[lemonSqueezy.createCheckout] Creating checkout", {
+      planId: args.planId,
+      donationPreset: args.donationPreset ?? null,
+      hasCustomAmount: args.customAmountCents != null,
+      variantIdSuffix: variantId.slice(-6),
+    });
 
     const response = await fetch(`${LEMON_SQUEEZY_ENDPOINT}/checkouts`, {
       method: "POST",
@@ -50,7 +118,7 @@ export const createCheckout = action({
             variant: {
               data: {
                 type: "variants",
-                id: args.variantId,
+                id: variantId,
               },
             },
           },
@@ -60,10 +128,36 @@ export const createCheckout = action({
 
     const json: any = await response.json();
     if (!response.ok) {
-      throw new Error(json.errors?.[0]?.detail || "Failed to create checkout");
+      const detail =
+        json.errors?.[0]?.detail ||
+        json.errors?.[0]?.title ||
+        JSON.stringify(json.errors?.[0] ?? json);
+      console.error("[lemonSqueezy.createCheckout] Lemon API error", {
+        status: response.status,
+        detail,
+      });
+      throw new Error(detail || "Failed to create checkout");
     }
 
-    return json.data.attributes.url as string;
+    let checkoutUrl: string = json.data?.attributes?.url;
+    if (!checkoutUrl || typeof checkoutUrl !== "string" || !checkoutUrl.startsWith("http")) {
+      console.error("[lemonSqueezy.createCheckout] Missing checkout URL in response", {
+        hasData: !!json.data,
+      });
+      throw new Error("Lemon Squeezy did not return a valid checkout URL.");
+    }
+
+    // Append custom price if provided (PWYW variants)
+    if (args.customAmountCents && args.customAmountCents > 0) {
+      const separator = checkoutUrl.includes("?") ? "&" : "?";
+      checkoutUrl = `${checkoutUrl}${separator}checkout[custom_price]=${args.customAmountCents}`;
+    }
+
+    console.log("[lemonSqueezy.createCheckout] success", {
+      checkoutUrlPrefix: checkoutUrl.slice(0, 40),
+    });
+
+    return checkoutUrl;
   },
 });
 
@@ -95,9 +189,15 @@ export const handleWebhook = internalAction({
           planId,
           lemonSqueezyId: payload.data.id,
           status: attributes.status,
-          renewsAt: attributes.renews_at ? new Date(attributes.renews_at).getTime() : undefined,
-          endsAt: attributes.ends_at ? new Date(attributes.ends_at).getTime() : undefined,
-          trialEndsAt: attributes.trial_ends_at ? new Date(attributes.trial_ends_at).getTime() : undefined,
+          renewsAt: attributes.renews_at
+            ? new Date(attributes.renews_at).getTime()
+            : undefined,
+          endsAt: attributes.ends_at
+            ? new Date(attributes.ends_at).getTime()
+            : undefined,
+          trialEndsAt: attributes.trial_ends_at
+            ? new Date(attributes.trial_ends_at).getTime()
+            : undefined,
         });
         break;
       }
@@ -109,7 +209,9 @@ export const handleWebhook = internalAction({
           lemonSqueezyId: payload.data.id,
           status: attributes.status,
           renewsAt: undefined,
-          endsAt: attributes.ends_at ? new Date(attributes.ends_at).getTime() : undefined,
+          endsAt: attributes.ends_at
+            ? new Date(attributes.ends_at).getTime()
+            : undefined,
         });
         break;
       }
@@ -125,7 +227,6 @@ export const handleWebhook = internalAction({
         break;
       }
       case "subscription_payment_failed": {
-        // Logic for failed payment alerts could go here
         console.warn(`Payment failed for user ${userId}`);
         break;
       }

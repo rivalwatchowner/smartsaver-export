@@ -32,7 +32,8 @@ export function CardRecommendation({ storeId }: CardRecommendationProps) {
     );
   }
 
-  const { best, all, savingsVsDefault } = recommendation;
+  const { best, all } = recommendation;
+  const earnPer100 = best.effectiveRate * 100;
 
   return (
     <>
@@ -63,7 +64,7 @@ export function CardRecommendation({ storeId }: CardRecommendationProps) {
                <View className="flex-row items-center gap-2">
                   <TrendingUp size={14} className="text-[#4F46E5]" />
                   <Text className="text-xs font-bold text-[#4F46E5]">
-                    Save ${savingsVsDefault.toFixed(2)} extra per $100 spent
+                    Earn ${earnPer100.toFixed(2)} per $100 spent
                   </Text>
                </View>
                <ArrowRight size={14} className="text-[#4F46E5]" />

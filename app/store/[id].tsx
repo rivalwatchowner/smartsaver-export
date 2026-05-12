@@ -3,7 +3,7 @@ import { View, Text, SafeAreaView, ScrollView, Spinner, Card, CardContent, Badge
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { ChevronLeft, Info, ExternalLink, Ticket, CreditCard, CheckCircle2, Barcode, Sparkles, Plus, Wallet, Trash2, RefreshCw } from "lucide-react-native";
+import { ChevronLeft, Info, ExternalLink, CreditCard, CheckCircle2, Barcode, Sparkles, Plus, Wallet, Trash2, RefreshCw } from "lucide-react-native";
 import { BarcodeModal } from "@/components/BarcodeModal";
 import { CardRecommendation } from "@/components/CardRecommendation";
 import { LoyaltyLinkForm } from "@/components/LoyaltyLinkForm";
@@ -215,9 +215,14 @@ export default function StoreDetail() {
              <Spinner />
           </View>
         ) : coupons.length === 0 ? (
-          <Card className="p-8 items-center border-dashed">
-            <Ticket size={40} className="text-muted-foreground/30 mb-2" />
-            <Text className="text-muted-foreground">No active coupons found for this store.</Text>
+          <Card className="p-8 items-center border-dashed border-[#4F46E5]/20 bg-[#4F46E5]/5">
+            <Sparkles size={40} className="text-[#4F46E5] mb-3 opacity-90" />
+            <Text className="font-bold text-base text-[#4F46E5] text-center mb-2">
+              AI is discovering deals…
+            </Text>
+            <Text className="text-muted-foreground text-center text-sm px-2">
+              Verified coupons for {store.name} will show up here as soon as they are found from real sources.
+            </Text>
           </Card>
         ) : (
           <View className="gap-4">
@@ -261,7 +266,7 @@ export default function StoreDetail() {
                           variant="outline" 
                           onPress={() => setSelectedBarcode({
                             title: coupon.title,
-                            value: coupon.barcode || "1234567890",
+                            value: coupon.barcode || coupon.code || "",
                             format: "CODE128"
                           })}
                         >
