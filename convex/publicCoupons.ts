@@ -1,3 +1,4 @@
+```ts
 import { v } from "convex/values";
 import { mutation, action, query, internalAction, internalMutation } from "./_generated/server";
 import { api, internal } from "./_generated/api";
@@ -105,9 +106,9 @@ export const savePublicCouponMutation = internalMutation({
       }
     }
 
-    // 6) All checks passed — insert
+    // 6) Normalize expiresAt to YYYY-MM-DD and insert
     try {
-      return await ctx.db.insert("publicCoupons", args);
+      return await ctx.db.insert("publicCoupons", { ...args, expiresAt: new Date(args.expiresAt).toISOString().split("T")[0] });
     } catch (err) {
       console.log("Failed to insert coupon:", args.title, err);
       return null;
@@ -605,8 +606,146 @@ export const seedPublicCoupons = mutation({
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
       .toISOString()
       .split("T")[0];
-    const seedData = [
-      // ... same seed data as before (omitted here for brevity) ...
+
+    type SeedCoupon = {
+      title: string;
+      code: string;
+      discount: string;
+      desc: string;
+      states?: string[];
+    };
+    type SeedGroup = { store: string; coupons: SeedCoupon[] };
+
+    const seedData: SeedGroup[] = [
+      {
+        store: "Shell",
+        coupons: [
+          { title: "5¢ off per gallon", code: "FUEL5", discount: "5¢ Off", desc: "With Fuel Rewards membership." },
+          { title: "10¢ off first fill-up", code: "SHELL10", discount: "10¢ Off", desc: "New members only." },
+          { title: "Iowa Special: 15¢ off", code: "IOWA15", discount: "15¢ Off", desc: "Valid only in Iowa Shell stations.", states: ["Iowa"] },
+        ],
+      },
+      {
+        store: "ExxonMobil",
+        coupons: [
+          { title: "6¢ off per gallon", code: "PLUS6", discount: "6¢ Off", desc: "With Rewards+ program." },
+          { title: "Extra 5¢ off", code: "LINK5", discount: "5¢ Off", desc: "When linking a credit card." },
+        ],
+      },
+      {
+        store: "BP",
+        coupons: [
+          { title: "5¢ off per gallon", code: "BP5", discount: "5¢ Off", desc: "Driver Rewards members." },
+          { title: "Free car wash", code: "BPWASH", discount: "Free", desc: "With 10+ gallon fill-up." },
+        ],
+      },
+      {
+        store: "Chevron",
+        coupons: [
+          { title: "10¢ off per gallon", code: "TEX10", discount: "10¢ Off", desc: "Texaco Rewards members." },
+          { title: "2x points on premium", code: "CHEV2X", discount: "2x Points", desc: "Valid all month." },
+        ],
+      },
+      {
+        store: "Costco",
+        coupons: [
+          { title: "$20 Shop Card", code: "COSTCO20", discount: "$20 Back", desc: "New Executive members." },
+          { title: "$100 off Furniture", code: "HOME100", discount: "$100 Off", desc: "Select items over $999." },
+          { title: "Buy 3 Get 1 Free Tires", code: "TIRES", discount: "B3G1", desc: "Valid on Michelin and Bridgestone." },
+        ],
+      },
+      {
+        store: "Sam's Club",
+        coupons: [
+          { title: "$15 off $50", code: "SAMS15", discount: "$15 Off", desc: "New members only." },
+          { title: "Free Rotisserie Chicken", code: "CHICKEN", discount: "Free", desc: "With first pickup order." },
+        ],
+      },
+      {
+        store: "Aldi",
+        coupons: [
+          { title: "$5 off $30", code: "ALDI5", discount: "$5 Off", desc: "Valid on first delivery order." },
+        ],
+      },
+      {
+        store: "Trader Joe's",
+        coupons: [
+          { title: "$2 off Flowers", code: "BLOOM", discount: "$2 Off", desc: "Seasonal bouquets." },
+        ],
+      },
+      {
+        store: "Publix",
+        coupons: [
+          { title: "$5 off $30", code: "PUB5", discount: "$5 Off", desc: "Valid on first delivery." },
+          { title: "BOGO Deli Subs", code: "SUB", discount: "BOGO", desc: "Thursday only special." },
+        ],
+      },
+      {
+        store: "H&M",
+        coupons: [{ title: "20% off one item", code: "HM20", discount: "20% Off", desc: "Join H&M rewards." }],
+      },
+      {
+        store: "Dollar General",
+        coupons: [{ title: "$5 off $25", code: "SAVE5", discount: "$5 Off", desc: "Valid every Saturday." }],
+      },
+      {
+        store: "Dollar Tree",
+        coupons: [{ title: "Buy 10 Get 1 Free", code: "TREE", discount: "B10G1", desc: "Valid on party supplies." }],
+      },
+      {
+        store: "TJ Maxx",
+        coupons: [{ title: "10% off first order", code: "MAXX", discount: "10% Off", desc: "With TJX Rewards card." }],
+      },
+      {
+        store: "Ross",
+        coupons: [{ title: "Senior Discount", code: "SENIOR", discount: "10% Off", desc: "Every Tuesday for 55+." }],
+      },
+      {
+        store: "Michaels",
+        coupons: [{ title: "20% off regular price", code: "ART20", discount: "20% Off", desc: "Sitewide or in-store." }],
+      },
+      {
+        store: "Petco",
+        coupons: [{ title: "$10 off $50", code: "PET10", discount: "$10 Off", desc: "Valid on food and treats." }],
+      },
+      {
+        store: "Office Depot",
+        coupons: [{ title: "$15 off $75", code: "OFFICE15", discount: "$15 Off", desc: "Business essentials only." }],
+      },
+      {
+        store: "GameStop",
+        coupons: [{ title: "$5 monthly reward", code: "PRO", discount: "$5 Off", desc: "Pro members only." }],
+      },
+      {
+        store: "Starbucks",
+        coupons: [
+          { title: "BOGO Frappuccino", code: "FRAP", discount: "BOGO", desc: "Happy Hour special 2pm-5pm." },
+          { title: "Free Pastry", code: "STAR50", discount: "Free", desc: "With 50 reward stars." },
+        ],
+      },
+      {
+        store: "McDonald's",
+        coupons: [
+          { title: "Free Large Fries", code: "APPFRIES", discount: "Free", desc: "With any $1 purchase in app." },
+          { title: "BOGO Big Mac", code: "BOGO", discount: "BOGO", desc: "Limit one per customer." },
+        ],
+      },
+      {
+        store: "Chipotle",
+        coupons: [{ title: "Free Guac", code: "GUAC", discount: "Free", desc: "With any entree purchase." }],
+      },
+      {
+        store: "Panera Bread",
+        coupons: [{ title: "Free Sip Club", code: "DRINK", discount: "Free", desc: "First 2 months free." }],
+      },
+      {
+        store: "AutoZone",
+        coupons: [{ title: "$10 off $50", code: "AUTO10", discount: "$10 Off", desc: "Online or in-store." }],
+      },
+      {
+        store: "Dick's Sporting Goods",
+        coupons: [{ title: "20% off apparel", code: "DSG20", discount: "20% Off", desc: "Select brands only." }],
+      },
     ];
 
     for (const group of seedData) {
@@ -662,4 +801,4 @@ export const cleanupOrphanClippedCoupons = mutation({
     return removed;
   },
 });
-
+```
