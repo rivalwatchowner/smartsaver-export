@@ -265,10 +265,60 @@ export const triggerDiscoveryForStore = internalMutation({
 export const discoverForStoreAction = internalAction({
   args: { storeId: v.id("stores"), storeName: v.string() },
   handler: async (ctx, args) => {
+    const ninetyDays = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0];
     const { threadId } = await couponAgent.createThread(ctx, {});
     await couponAgent.saveMessage(ctx, {
       threadId,
-      prompt: `Search ACTIVE coupons at ${args.storeName}. Call savePublicCoupon tool for 3-5 high-quality active deals.`,
+      prompt: `Find 3-5 active coupons currently available at ${args.storeName}.
+For each deal, call the savePublicCoupon tool. You MUST always include ALL of these fields:
+- storeName: "${args.storeName}"
+- isManufacturer: false
+- title: short coupon title
+- description: one sentence about the deal
+- discount: short string like "10% Off" or "$5 Off $30"
+- code: the promo code string — use "" (empty string) if there is no code, never omit this field
+- category: the store category such as "Grocery", "Gas", "Pharmacy", "Electronics" — use "General" if unsure, never omit this field
+- expiresAt: expiration date in YYYY-MM-DD format — if unknown use ${ninetyDays}, never omit this field`,
+      skipEmbeddings: true,
+    });
+    const result = await couponAgent.streamText(ctx, { threadId }, {});
+    await result.consumeStream();
+  },
+});
+
+export const triggerDiscoveryForGasStore = internalMutation({
+  args: { storeId: v.id("stores"), storeName: v.string() },
+  handler: async (ctx, args) => {
+    await ctx.scheduler.runAfter(
+      0,
+      internal.publicCoupons.discoverGasForStoreAction,
+      { storeId: args.storeId, storeName: args.storeName }
+    );
+  },
+});
+
+export const discoverGasForStoreAction = internalAction({
+  args: { storeId: v.id("stores"), storeName: v.string() },
+  handler: async (ctx, args) => {
+    const ninetyDays = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0];
+    const { threadId } = await couponAgent.createThread(ctx, {});
+    await couponAgent.saveMessage(ctx, {
+      threadId,
+      prompt: `Find 3-5 active fuel and gas discount deals currently available at ${args.storeName}.
+Include pump discounts, loyalty rewards, credit card fuel savings, and any car wash deals.
+For each deal, call the savePublicCoupon tool. You MUST always include ALL of these fields:
+- storeName: "${args.storeName}"
+- isManufacturer: false
+- title: short coupon title (e.g. "5¢ Off Per Gallon")
+- description: one sentence about the deal
+- discount: short string like "5¢ Off Per Gallon" or "10% Off Car Wash"
+- code: the promo/loyalty code — use "" (empty string) if there is no code, never omit this field
+- category: "Gas" — always use "Gas" for gas station deals, never omit this field
+- expiresAt: expiration date in YYYY-MM-DD format — if unknown use ${ninetyDays}, never omit this field`,
       skipEmbeddings: true,
     });
     const result = await couponAgent.streamText(ctx, { threadId }, {});
