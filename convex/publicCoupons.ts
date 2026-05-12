@@ -1,4 +1,3 @@
-```ts
 import { v } from "convex/values";
 import { mutation, action, query, internalAction, internalMutation } from "./_generated/server";
 import { api, internal } from "./_generated/api";
@@ -801,4 +800,3 @@ export const cleanupOrphanClippedCoupons = mutation({
     return removed;
   },
 });
-```
