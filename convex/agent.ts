@@ -213,7 +213,7 @@ START SAVING NOW. Do not ask for clarification. Do not explain what you will do.
           storeId = store._id;
         }
 
-        await ctx.db.insert("publicCoupons", {
+        const row = {
           storeId,
           storeName: args.isManufacturer ? "Manufacturer" : args.storeName,
           brandName: args.brandName,
@@ -235,13 +235,35 @@ START SAVING NOW. Do not ask for clarification. Do not explain what you will do.
           fuelType: args.fuelType,
           fuelDiscountCents: args.fuelDiscountCents,
           loyaltyProgram: args.loyaltyProgram,
-        });
+        };
 
-        console.log("[couponAgent.savePublicCoupon] inserted row", {
-          storeName: args.storeName,
-          title: args.title?.slice?.(0, 60),
-        });
-        return `Successfully saved ${args.isManufacturer ? "manufacturer" : "store"} coupon: ${args.title}`;
+        try {
+          await ctx.db.insert("publicCoupons", row);
+          console.log("[couponAgent.savePublicCoupon] insert succeeded", {
+            storeName: args.storeName,
+            title: args.title?.slice?.(0, 60),
+          });
+          return `Successfully saved ${args.isManufacturer ? "manufacturer" : "store"} coupon: ${args.title}`;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          const stack = err instanceof Error ? err.stack : undefined;
+          console.error("[couponAgent.savePublicCoupon] INSERT FAILED:", err);
+          console.error("[couponAgent.savePublicCoupon] message:", message);
+          console.error("[couponAgent.savePublicCoupon] stack:", stack);
+          try {
+            console.error(
+              "[couponAgent.savePublicCoupon] args were:",
+              JSON.stringify(args)
+            );
+          } catch (stringifyErr) {
+            console.error(
+              "[couponAgent.savePublicCoupon] args (JSON.stringify failed):",
+              stringifyErr,
+              args
+            );
+          }
+          return `Insert failed: ${message}`;
+        }
       },
     }),
   },
