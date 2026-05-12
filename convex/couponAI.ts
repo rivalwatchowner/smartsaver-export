@@ -30,7 +30,7 @@ export const runAgent = internalAction({
   handler: async (ctx, args) => {
     const result = await couponAgent.streamText(
       ctx,
-      { threadId: args.threadId },
+      { threadId: args.threadId, maxSteps: 24 },
       { promptMessageId: args.messageId }
     );
     await result.consumeStream();

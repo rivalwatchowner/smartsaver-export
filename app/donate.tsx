@@ -14,20 +14,51 @@ import { ArrowLeft, Heart, Sparkles, Check, DollarSign } from "lucide-react-nati
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import * as Linking from "expo-linking";
-import { Alert } from "react-native";
+import { Alert, Platform } from "react-native";
 
-/** Base variant used when a custom dollar amount is sent (Lemon `checkout[custom_price]`). */
-const CUSTOM_DONATION_VARIANT_ID = "variant_month_id";
+/**
+ * Donation checkouts use Convex env → real Lemon Squeezy variant ids (server-side):
+ * - LEMON_SQUEEZY_VARIANT_DONATION_5
+ * - LEMON_SQUEEZY_VARIANT_DONATION_10
+ * - LEMON_SQUEEZY_VARIANT_DONATION_15  (optional: used with checkout[custom_price] for $15 on PWYW)
+ * - LEMON_SQUEEZY_VARIANT_DONATION_25
+ * - LEMON_SQUEEZY_VARIANT_DONATION_CUSTOM (custom dollar input; PWYW variant)
+ *
+ * Old client-side placeholders (variant_month_id, etc.) are removed — they are not valid LS ids.
+ */
+
+type DonationPreset = "5" | "10" | "15" | "25";
 
 type DonationTier = {
-  id: string;
+  id: DonationPreset;
   amount: number;
   label: string;
-  variantId: string;
-  /** If set, preset checkout includes custom price (e.g. $15 on a $5 PWYW variant). */
+  /** If set, checkout URL gets checkout[custom_price]=cents (PWYW product). */
   customAmountCents?: number;
   popular?: boolean;
 };
+
+function formatCheckoutError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return "Unknown error";
+  }
+}
+
+async function openCheckoutUrl(url: string) {
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    window.open(url, "_blank", "noopener,noreferrer");
+    return;
+  }
+  const can = await Linking.canOpenURL(url);
+  if (!can) {
+    throw new Error(`Cannot open checkout URL on this device: ${url.slice(0, 48)}…`);
+  }
+  await Linking.openURL(url);
+}
 
 export default function DonatePage() {
   const router = useRouter();
@@ -36,38 +67,53 @@ export default function DonatePage() {
   const [customAmount, setCustomAmount] = useState("");
 
   const donationTiers: DonationTier[] = [
-    { id: "5", amount: 5, label: "$5 thank you 💜", variantId: "variant_month_id" },
+    { id: "5", amount: 5, label: "$5 thank you 💜" },
     {
       id: "10",
       amount: 10,
       label: "$10 power boost 🚀",
-      variantId: "variant_power_id",
       popular: true,
     },
     {
       id: "15",
       amount: 15,
       label: "$15 super thanks ⭐",
-      variantId: CUSTOM_DONATION_VARIANT_ID,
       customAmountCents: 1500,
     },
-    { id: "25", amount: 25, label: "$25 hero supporter 🌟", variantId: "variant_super_id" },
+    { id: "25", amount: 25, label: "$25 hero supporter 🌟" },
   ];
 
   const handlePreset = async (tier: DonationTier) => {
+    console.log("[donate] Preset pressed", {
+      preset: tier.id,
+      amount: tier.amount,
+      customAmountCents: tier.customAmountCents ?? null,
+    });
     setLoading(tier.id);
     try {
       const url = await createCheckout({
-        variantId: tier.variantId,
         planId: "donation",
+        donationPreset: tier.id,
         ...(tier.customAmountCents != null
           ? { customAmountCents: tier.customAmountCents }
           : {}),
       });
-      if (url) Linking.openURL(url);
+      console.log("[donate] createCheckout returned", {
+        urlLength: url?.length,
+        startsWithHttp: url?.startsWith("http"),
+      });
+      if (!url || !url.startsWith("http")) {
+        const msg = "Checkout did not return a valid URL. Check Convex logs.";
+        console.error("[donate]", msg, url);
+        Alert.alert("Checkout failed", msg);
+        return;
+      }
+      await openCheckoutUrl(url);
+      console.log("[donate] Opened checkout URL");
     } catch (error) {
-      console.error(error);
-      Alert.alert("Checkout failed", "Could not start checkout. Please try again.");
+      const message = formatCheckoutError(error);
+      console.error("[donate] createCheckout error", error);
+      Alert.alert("Checkout failed", message);
     } finally {
       setLoading(null);
     }
@@ -84,17 +130,29 @@ export default function DonatePage() {
       Alert.alert("Minimum $1", "Please enter an amount of at least $1.00.");
       return;
     }
+    console.log("[donate] Custom donate", { cents });
     setLoading("custom");
     try {
       const url = await createCheckout({
-        variantId: CUSTOM_DONATION_VARIANT_ID,
         planId: "donation",
         customAmountCents: cents,
       });
-      if (url) Linking.openURL(url);
+      console.log("[donate] createCheckout (custom) returned", {
+        urlLength: url?.length,
+        startsWithHttp: url?.startsWith("http"),
+      });
+      if (!url || !url.startsWith("http")) {
+        Alert.alert(
+          "Checkout failed",
+          "Checkout did not return a valid URL. Check Convex logs."
+        );
+        return;
+      }
+      await openCheckoutUrl(url);
     } catch (error) {
-      console.error(error);
-      Alert.alert("Checkout failed", "Could not start checkout. Please try again.");
+      const message = formatCheckoutError(error);
+      console.error("[donate] createCheckout (custom) error", error);
+      Alert.alert("Checkout failed", message);
     } finally {
       setLoading(null);
     }

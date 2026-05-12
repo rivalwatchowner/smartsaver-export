@@ -1,22 +1,30 @@
-import React from 'react';
-import { ScrollView, View, Text, Pressable } from 'react-native';
-import { useRouter } from 'expo-router';
-import { ChevronLeft } from 'lucide-react-native';
+import React from "react";
+import {
+  SafeAreaView,
+  ScrollView,
+  View,
+  Text,
+  Button,
+} from "@/components/ui";
+import { useRouter } from "expo-router";
+import { ChevronLeft } from "lucide-react-native";
 
 export default function PrivacyScreen() {
   const router = useRouter();
 
   return (
-    <View className="flex-1 bg-white">
-      {/* Header */}
-      <View className="flex-row items-center px-4 py-3 border-b border-gray-200 bg-white">
-        <Pressable onPress={() => router.back()} className="mr-3">
-          <ChevronLeft size={24} color="#4F46E5" />
-        </Pressable>
-        <Text className="text-lg font-bold text-gray-900">Privacy Policy</Text>
+    <SafeAreaView edges={["top"]} className="flex-1 bg-background">
+      <View className="flex-row items-center px-4 py-3 border-b border-border bg-background">
+        <Button variant="ghost" size="icon" onPress={() => router.back()} className="mr-1">
+          <ChevronLeft size={24} className="text-[#4F46E5]" />
+        </Button>
+        <Text className="text-lg font-bold text-foreground">Privacy Policy</Text>
       </View>
 
-      <ScrollView className="flex-1 px-4 py-4" contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView
+        className="flex-1 px-4 py-4"
+        contentContainerClassName="pb-10"
+      >
         {/* Title */}
         <Text className="text-2xl font-bold text-gray-900 mb-1">PRIVACY POLICY</Text>
         <Text className="text-sm text-gray-500 mb-6">Last updated May 10, 2026</Text>
@@ -353,6 +361,6 @@ export default function PrivacyScreen() {
           Based on the applicable laws of your country or state of residence, you may have the right to request access to the personal information we collect, details about how we have processed it, correct inaccuracies, or delete your personal information. To request to review, update, or delete your personal information, please visit: usesmartsaver.com/settings.
         </Text>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }

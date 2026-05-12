@@ -298,7 +298,11 @@ export const discoverForStoreAction = internalAction({
       prompt: `Search ACTIVE coupons at ${args.storeName}. Call savePublicCoupon tool for 3-5 high-quality active deals. You MUST provide a real sourceUrl for every coupon — never invent example coupons.`,
       skipEmbeddings: true,
     });
-    const result = await couponAgent.streamText(ctx, { threadId }, {});
+    const result = await couponAgent.streamText(
+      ctx,
+      { threadId, maxSteps: 24 },
+      {}
+    );
     await result.consumeStream();
     return null;
   },
@@ -356,13 +360,17 @@ Call savePublicCoupon with the fuelPrice, fuelType, fuelDiscountCents, and loyal
 NEVER invent fuel prices. You MUST provide a real sourceUrl. Only save deals you can verify.`,
       skipEmbeddings: true,
     });
-    const result = await couponAgent.streamText(ctx, { threadId }, {});
+    const result = await couponAgent.streamText(
+      ctx,
+      { threadId, maxSteps: 24 },
+      {}
+    );
     await result.consumeStream();
     return null;
   },
 });
 
-// FIX #3: Gas stations with active fuel deals (Gas category only), sorted by lowest fuelPrice
+// Gas stations with fuel price and/or discount / loyalty data (Gas category only)
 export const listGasSavingsStations = query({
   args: {},
   handler: async (ctx) => {
@@ -376,21 +384,41 @@ export const listGasSavingsStations = query({
       .withIndex("by_active", (q) => q.eq("isActive", true))
       .collect();
 
+    const hasFuelSignal = (c: (typeof coupons)[number]) => {
+      const hasPrice =
+        c.fuelPrice !== undefined && c.fuelPrice !== null && c.fuelPrice > 0;
+      const hasDiscount =
+        c.fuelDiscountCents != null && c.fuelDiscountCents > 0;
+      const hasLoyalty =
+        typeof c.loyaltyProgram === "string" &&
+        c.loyaltyProgram.trim().length > 0;
+      return hasPrice || hasDiscount || hasLoyalty;
+    };
+
     const gasCoupons = coupons.filter(
       (c) =>
-        c.fuelPrice !== undefined &&
-        c.fuelPrice !== null &&
         c.barcode !== PLACEHOLDER_BARCODE &&
         !!c.storeId &&
-        gasStoreIds.has(c.storeId)
+        gasStoreIds.has(c.storeId) &&
+        hasFuelSignal(c)
     );
 
     if (gasCoupons.length === 0) return [];
 
+    /** Prefer rows with a real posted price; else best discount; else any loyalty row. */
+    const rankCoupon = (c: (typeof gasCoupons)[number]) => {
+      if (c.fuelPrice != null && c.fuelPrice > 0) {
+        return 1_000_000 - Math.round(c.fuelPrice * 1000);
+      }
+      const cents = c.fuelDiscountCents ?? 0;
+      return 100_000 + cents * 100 + (c.loyaltyProgram?.trim() ? 1 : 0);
+    };
+
     const byStoreId: Record<string, (typeof gasCoupons)[number]> = {};
     for (const c of gasCoupons) {
       const key = c.storeId as string;
-      if (!byStoreId[key] || c.fuelPrice! < byStoreId[key].fuelPrice!) {
+      const prev = byStoreId[key];
+      if (!prev || rankCoupon(c) > rankCoupon(prev)) {
         byStoreId[key] = c;
       }
     }
@@ -403,7 +431,14 @@ export const listGasSavingsStations = query({
       };
     });
 
-    return result.sort((a, b) => (a.fuelPrice ?? 999) - (b.fuelPrice ?? 999));
+    return result.sort((a, b) => {
+      const ap = a.fuelPrice;
+      const bp = b.fuelPrice;
+      if (ap != null && bp != null) return ap - bp;
+      if (ap != null) return -1;
+      if (bp != null) return 1;
+      return (b.fuelDiscountCents ?? 0) - (a.fuelDiscountCents ?? 0);
+    });
   },
 });
 

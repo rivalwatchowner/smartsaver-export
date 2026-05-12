@@ -1,22 +1,30 @@
-import React from 'react';
-import { ScrollView, View, Text, Pressable } from 'react-native';
-import { useRouter } from 'expo-router';
-import { ChevronLeft } from 'lucide-react-native';
+import React from "react";
+import {
+  SafeAreaView,
+  ScrollView,
+  View,
+  Text,
+  Button,
+} from "@/components/ui";
+import { useRouter } from "expo-router";
+import { ChevronLeft } from "lucide-react-native";
 
 export default function TermsScreen() {
   const router = useRouter();
 
   return (
-    <View className="flex-1 bg-white">
-      {/* Header */}
-      <View className="flex-row items-center px-4 py-3 border-b border-gray-200 bg-white">
-        <Pressable onPress={() => router.back()} className="mr-3">
-          <ChevronLeft size={24} color="#4F46E5" />
-        </Pressable>
-        <Text className="text-lg font-bold text-gray-900">Terms of Service</Text>
+    <SafeAreaView edges={["top"]} className="flex-1 bg-background">
+      <View className="flex-row items-center px-4 py-3 border-b border-border bg-background">
+        <Button variant="ghost" size="icon" onPress={() => router.back()} className="mr-1">
+          <ChevronLeft size={24} className="text-[#4F46E5]" />
+        </Button>
+        <Text className="text-lg font-bold text-foreground">Terms of Service</Text>
       </View>
 
-      <ScrollView className="flex-1 px-4 py-4" contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView
+        className="flex-1 px-4 py-4"
+        contentContainerClassName="pb-10"
+      >
         {/* Title */}
         <Text className="text-2xl font-bold text-gray-900 mb-1">SMARTSAVER TERMS OF SERVICE</Text>
         <Text className="text-sm text-gray-500 mb-6">Last Updated: May 10, 2026</Text>
@@ -210,6 +218,6 @@ export default function TermsScreen() {
           SmartSaver - Save money on everything. 100% Free. Forever.
         </Text>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }

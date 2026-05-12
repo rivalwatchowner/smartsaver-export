@@ -104,6 +104,9 @@ function RootLayoutInner() {
               <Stack.Screen name="forgot-password" />
               <Stack.Screen name="notifications" />
               <Stack.Screen name="privacy-security" />
+              <Stack.Screen name="privacy" />
+              <Stack.Screen name="terms" />
+              <Stack.Screen name="settings" />
               <Stack.Screen name="donate" />
               <Stack.Screen name="gas-savings" />
               <Stack.Screen name="(tabs)" />

@@ -69,6 +69,10 @@ export default function GasSavingsScreen() {
           stations.map((row) => {
             const name = row.store?.name ?? row.storeName;
             const sid = row.storeId as Id<"stores"> | undefined;
+            const hasPrice =
+              row.fuelPrice != null &&
+              row.fuelPrice > 0 &&
+              Number.isFinite(row.fuelPrice);
             return (
               <Pressable
                 key={String(row._id)}
@@ -83,12 +87,34 @@ export default function GasSavingsScreen() {
                       <Text className="text-[#4F46E5] text-[10px] font-bold uppercase tracking-wide mb-1">
                         {row.fuelType ?? "Regular"}
                       </Text>
-                      <Text className="text-[#4F46E5] font-black text-xl">
-                        ${row.fuelPrice!.toFixed(3)}
-                      </Text>
-                      <Text className="text-muted-foreground text-[9px] mt-1">
-                        per gal
-                      </Text>
+                      {hasPrice ? (
+                        <>
+                          <Text className="text-[#4F46E5] font-black text-xl">
+                            ${row.fuelPrice!.toFixed(3)}
+                          </Text>
+                          <Text className="text-muted-foreground text-[9px] mt-1">
+                            per gal
+                          </Text>
+                        </>
+                      ) : row.fuelDiscountCents != null && row.fuelDiscountCents > 0 ? (
+                        <>
+                          <Text className="text-[#4F46E5] font-black text-xl">
+                            {row.fuelDiscountCents}¢
+                          </Text>
+                          <Text className="text-muted-foreground text-[9px] mt-1 text-center">
+                            off / gal
+                          </Text>
+                        </>
+                      ) : (
+                        <>
+                          <Text className="text-[#4F46E5] font-black text-sm text-center px-1">
+                            Rewards
+                          </Text>
+                          <Text className="text-muted-foreground text-[9px] mt-1 text-center">
+                            program
+                          </Text>
+                        </>
+                      )}
                     </View>
                     <CardContent className="flex-1 p-4 gap-2">
                       <Text className="font-bold text-base" numberOfLines={1}>
